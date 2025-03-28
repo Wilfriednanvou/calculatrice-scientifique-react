@@ -13,7 +13,7 @@ function App() {
         <Calculatrice />
       </main>
       <footer>
-        <p>© 2025 - Calculatrice Avancée en React.js</p>
+        <p>© 2025 - Calculatrice Avancée en React.js. Développé avec passion par [Wilfried & Andrade]</p>
       </footer>
     </div>
   );
