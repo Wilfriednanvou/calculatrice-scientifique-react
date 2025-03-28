@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 
 export default function useCalculatrice() {
   const [affichage, setAffichage] = useState('0');
@@ -14,38 +14,70 @@ export default function useCalculatrice() {
   const [estEnRadians, setEstEnRadians] = useState(false);
   const [dernierResultat, setDernierResultat] = useState(null);
   
-  // Utilisation d'un useRef pour stocker des calculs intermédiaires
-  // afin d'éviter des recalculs inutiles
+  // Cache des calculs pour éviter de recalculer les mêmes expressions
   const cacheCalculs = useRef(new Map());
   
-  // Vérifie si une formule mathématique est potentiellement valide
+  // Cache des validations pour éviter de revalider les mêmes formules
+  const cacheValidations = useRef(new Map());
+  
+  // Vérification robuste de la validité d'une formule mathématique
   const estFormulaValide = useCallback((formule) => {
-    // Formule vide est considérée comme valide
-    if (!formule || formule.trim() === '') return true;
+    // Vérifier le cache d'abord
+    if (cacheValidations.current.has(formule)) {
+      return cacheValidations.current.get(formule);
+    }
+    
+    if (!formule || formule.trim() === '') {
+      cacheValidations.current.set(formule, true);
+      return true;
+    }
     
     // Vérifier les parenthèses non équilibrées
     let compteurParentheses = 0;
     for (let i = 0; i < formule.length; i++) {
       if (formule[i] === '(') compteurParentheses++;
       if (formule[i] === ')') compteurParentheses--;
-      if (compteurParentheses < 0) return false; // Parenthèse fermante sans ouvrante
+      if (compteurParentheses < 0) {
+        cacheValidations.current.set(formule, false);
+        return false;
+      }
     }
-    if (compteurParentheses !== 0) return false; // Parenthèses non équilibrées
-    
-    // Vérifier les opérateurs consécutifs invalides
-    if (/[×÷][×÷+]/.test(formule)) return false;
-    
-    // Vérifier si termine par un opérateur (sauf si c'est un signe négatif après un autre opérateur)
-    if (/[+×÷^]$/.test(formule)) return false;
-    
-    // Vérifier les fonctions sans argument
-    if (/(?:sin|cos|tan|log|ln|sqrt)\($/.test(formule) && !/(?:sin|cos|tan|log|ln|sqrt)\(.+/.test(formule)) {
+    if (compteurParentheses !== 0) {
+      cacheValidations.current.set(formule, false);
       return false;
     }
     
+    // Vérifier les opérateurs consécutifs invalides (mais autoriser le moins après un opérateur)
+    if (/[×÷][×÷+]/.test(formule)) {
+      cacheValidations.current.set(formule, false);
+      return false;
+    }
+    
+    // Vérifier si termine par un opérateur (sauf si c'est un signe négatif après un autre opérateur)
+    if (/[+×÷^]$/.test(formule)) {
+      cacheValidations.current.set(formule, false);
+      return false;
+    }
+    
+    // Vérifier les fonctions sans argument
+    const fonctionsRegex = /(?:sin|cos|tan|log|ln|sqrt)\($/;
+    if (fonctionsRegex.test(formule)) {
+      cacheValidations.current.set(formule, false);
+      return false;
+    }
+    
+    // Vérifier les divisions par zéro évidentes (plus exhaustif)
+    if (/÷0(?![.]?\d)/.test(formule) || /÷\(0\)/.test(formule)) {
+      cacheValidations.current.set(formule, false);
+      return false;
+    }
+    
+    // Si toutes les vérifications passent, la formule est valide
+    cacheValidations.current.set(formule, true);
     return true;
   }, []);
   
+  // Fonction optimisée pour effectuer des calculs
   const calculer = useCallback((formule) => {
     if (!formule) return { valeur: '0', erreur: false };
     
@@ -68,7 +100,7 @@ export default function useCalculatrice() {
         .replace(/π/g, 'Math.PI')
         .replace(/e(?!\^)/g, 'Math.E');
       
-      // Gestion spéciale pour les fonctions trigonométriques et exponentielles
+      // Gestion des fonctions trigonométriques selon le mode (radians ou degrés)
       if (!estEnRadians) {
         // Conversion degrés → radians pour les fonctions trigonométriques
         formuleModifiee = formuleModifiee
@@ -93,7 +125,7 @@ export default function useCalculatrice() {
       // eslint-disable-next-line no-new-func
       const resultat = new Function('return ' + formuleModifiee)();
       
-      // Formater le résultat pour éviter les nombres trop longs ou inexacts
+      // Validation des résultats
       if (isNaN(resultat)) {
         const reponse = { valeur: 'Erreur: résultat non numérique', erreur: true };
         cacheCalculs.current.set(cacheKey, reponse);
@@ -109,14 +141,14 @@ export default function useCalculatrice() {
         return reponse;
       }
       
-      // Formater les grands et petits nombres plus efficacement
+      // Formatage optimal des nombres pour l'affichage
       const valeurAbsolue = Math.abs(resultat);
       let valeurFormatee;
       
       if (valeurAbsolue === 0) {
         valeurFormatee = '0';
       } else if (valeurAbsolue < 0.0000001 || valeurAbsolue > 9999999999) {
-        // Utiliser la notation scientifique pour les très grands ou petits nombres
+        // Notation scientifique pour les très grands ou très petits nombres
         valeurFormatee = resultat.toExponential(6);
       } else {
         // Limiter à 10 chiffres significatifs et supprimer les zéros inutiles
@@ -125,7 +157,7 @@ export default function useCalculatrice() {
       
       const reponse = { valeur: valeurFormatee, erreur: false };
       
-      // Stocker dans le cache (avec limite de taille)
+      // Gestion du cache avec une limite de taille
       if (cacheCalculs.current.size > 100) {
         // Supprimer l'entrée la plus ancienne si le cache est trop grand
         const oldestKey = cacheCalculs.current.keys().next().value;
@@ -137,7 +169,7 @@ export default function useCalculatrice() {
     } catch (error) {
       console.error("Erreur de calcul:", error);
       const reponse = { 
-        valeur: `Erreur: ${error.message.substring(0, 30)}...`, 
+        valeur: `Erreur: ${error.message.substring(0, 30)}${error.message.length > 30 ? '...' : ''}`, 
         erreur: true 
       };
       cacheCalculs.current.set(cacheKey, reponse);
@@ -145,6 +177,7 @@ export default function useCalculatrice() {
     }
   }, [estEnRadians, estFormulaValide]);
 
+  // Gestion optimisée de l'entrée des nombres
   const gererEntreeNombre = useCallback((num) => {
     setAffichage(prev => {
       if (prev === '0' || prev === 'Erreur' || prev.startsWith('Erreur:')) return num;
@@ -152,6 +185,7 @@ export default function useCalculatrice() {
       if (num === '.' && prev.includes('.')) return prev;
       return prev + num;
     });
+    
     setFormule(prev => {
       // Si nous venons de calculer un résultat, recommencer avec le nouveau nombre
       if (dernierResultat !== null) {
@@ -161,6 +195,11 @@ export default function useCalculatrice() {
       
       // Si le dernier caractère est une parenthèse fermante, ajouter un opérateur de multiplication implicite
       if (prev.endsWith(')')) {
+        return prev + '×' + num;
+      }
+      
+      // Si le dernier caractère est π ou e, ajouter un opérateur de multiplication implicite
+      if (prev.endsWith('π') || prev.endsWith('e')) {
         return prev + '×' + num;
       }
       
@@ -174,11 +213,12 @@ export default function useCalculatrice() {
     });
   }, [dernierResultat]);
 
+  // Gestion optimisée de l'entrée des opérateurs
   const gererEntreeOperateur = useCallback((operateur) => {
     // Réinitialiser le dernier résultat
     setDernierResultat(null);
     
-    // Vérifier si le dernier caractère est déjà un opérateur
+    // Vérifier le dernier caractère de la formule
     const dernierCaractere = formule.slice(-1);
     const estOperateur = ['+', '-', '×', '÷', '^'].includes(dernierCaractere);
     
@@ -206,14 +246,14 @@ export default function useCalculatrice() {
     }
     
     // Empêcher les opérateurs au début sauf le moins (pour les nombres négatifs)
-    if (formule === '' && operateur !== '-' && ![
-      'sin', 'cos', 'tan', 'log', 'ln', 'sqrt'
-    ].includes(operateur)) {
+    // et les fonctions spéciales
+    const fonctionsSpeciales = ['sin', 'cos', 'tan', 'log', 'ln', 'sqrt'];
+    if (formule === '' && operateur !== '-' && !fonctionsSpeciales.includes(operateur)) {
       return;
     }
     
     // Ajouter une parenthèse ouvrante après certaines fonctions
-    if (['sin', 'cos', 'tan', 'log', 'ln', 'sqrt'].includes(operateur)) {
+    if (fonctionsSpeciales.includes(operateur)) {
       setFormule(prev => prev + operateur + '(');
       setAffichage(operateur);
     } else {
@@ -222,8 +262,9 @@ export default function useCalculatrice() {
     }
   }, [formule, dernierResultat]);
 
+  // Gestion des parenthèses
   const gererParenthese = useCallback((parenthese) => {
-    // Cas spécial pour les parenthèses
+    // Cas spécial pour les parenthèses fermantes
     if (parenthese === ')') {
       // Vérifier s'il y a des parenthèses ouvrantes non fermées
       let ouvrantes = 0;
@@ -236,7 +277,7 @@ export default function useCalculatrice() {
     }
     
     // Pour la parenthèse ouvrante, ajouter un opérateur de multiplication si nécessaire
-    if (parenthese === '(' && /[0-9π]$/.test(formule)) {
+    if (parenthese === '(' && /[0-9πe]$/.test(formule)) {
       setFormule(prev => prev + '×(');
       setAffichage('(');
     } else {
@@ -246,6 +287,7 @@ export default function useCalculatrice() {
     setDernierResultat(null);
   }, [formule]);
 
+  // Fonction d'égalité et de calcul
   const gererEgal = useCallback(() => {
     if (!formule) return;
     
@@ -270,21 +312,28 @@ export default function useCalculatrice() {
           if (prev.length > 0 && prev[0].formule === formule) {
             return prev; // Ne pas ajouter de doublons
           }
-          return [{ formule: formule, resultat: resultatObj.valeur, date: new Date() }, ...prev].slice(0, 50); // Limiter à 50 entrées
+          return [{ 
+            formule, 
+            resultat: resultatObj.valeur, 
+            estEnRadians, 
+            date: new Date() 
+          }, ...prev].slice(0, 50); // Limiter à 50 entrées
         });
       }
     } catch (error) {
       setAffichage('Erreur: calcul impossible');
       console.error("Erreur lors du calcul:", error);
     }
-  }, [formule, calculer]);
+  }, [formule, calculer, estEnRadians]);
 
+  // Fonction pour effacer toute la formule
   const gererEffacer = useCallback(() => {
     setAffichage('0');
     setFormule('');
     setDernierResultat(null);
   }, []);
 
+  // Fonction pour effacer un caractère
   const gererRetour = useCallback(() => {
     if (affichage === 'Erreur' || affichage.startsWith('Erreur:') || affichage.length <= 1) {
       setAffichage('0');
@@ -311,6 +360,7 @@ export default function useCalculatrice() {
     setDernierResultat(null);
   }, [affichage]);
 
+  // Fonction pour calculer le pourcentage
   const gererPourcentage = useCallback(() => {
     try {
       // Si nous avons une opération en cours, calculer le pourcentage du dernier nombre
@@ -335,6 +385,7 @@ export default function useCalculatrice() {
     }
   }, [affichage, formule]);
 
+  // Fonction pour changer le signe
   const gererChangementSigne = useCallback(() => {
     if (affichage === '0' || affichage === 'Erreur' || affichage.startsWith('Erreur:')) return;
     
@@ -360,18 +411,27 @@ export default function useCalculatrice() {
     setDernierResultat(null);
   }, [affichage]);
 
+  // Fonction pour les opérations de mémoire
   const gererOperationMemoire = useCallback((operation) => {
     const valeurActuelle = parseFloat(affichage) || 0;
     
     switch (operation) {
       case 'M+':
-        setMemoire(prev => ({ ...prev, MPlus: prev.MPlus + valeurActuelle }));
+        setMemoire(prev => ({
+          ...prev, 
+          MPlus: prev.MPlus + valeurActuelle, 
+          M: prev.M + valeurActuelle
+        }));
         break;
       case 'M-':
-        setMemoire(prev => ({ ...prev, MMoins: prev.MMoins + valeurActuelle }));
+        setMemoire(prev => ({
+          ...prev, 
+          MMoins: prev.MMoins + valeurActuelle, 
+          M: prev.M - valeurActuelle
+        }));
         break;
       case 'MR':
-        const valeurMemoire = memoire.MPlus - memoire.MMoins;
+        const valeurMemoire = memoire.M;
         setAffichage(String(valeurMemoire));
         // Si nous sommes en début de formule ou après un opérateur
         if (!formule || /[+\-×÷^(]$/.test(formule)) {
@@ -388,24 +448,34 @@ export default function useCalculatrice() {
     }
   }, [affichage, formule, memoire]);
 
+  // Fonction pour basculer entre degrés et radians
   const basculerModeAngle = useCallback(() => {
-    setEstEnRadians(!estEnRadians);
+    setEstEnRadians(prev => !prev);
     // Vider le cache lors du changement de mode pour forcer le recalcul
     cacheCalculs.current.clear();
-  }, [estEnRadians]);
+  }, []);
   
-  const reutiliserHistorique = useCallback((formuleHistorique, resultatHistorique) => {
+  // Fonction pour réutiliser un calcul de l'historique
+  const reutiliserHistorique = useCallback((formuleHistorique, resultatHistorique, modeRadiansHistorique) => {
     // Ne garder que la partie avant le signe égal
     const formuleBase = formuleHistorique.split('=')[0];
     setAffichage(resultatHistorique);
     setFormule(formuleBase);
     setDernierResultat(resultatHistorique);
-  }, []);
+    
+    // Restaurer le mode radians/degrés utilisé pour ce calcul si disponible
+    if (modeRadiansHistorique !== undefined && modeRadiansHistorique !== estEnRadians) {
+      setEstEnRadians(modeRadiansHistorique);
+      cacheCalculs.current.clear();
+    }
+  }, [estEnRadians]);
   
+  // Fonction pour effacer l'historique
   const effacerHistorique = useCallback(() => {
     setHistorique([]);
   }, []);
 
+  // Expose toutes les fonctions et états nécessaires
   return {
     affichage,
     formule,

@@ -18,6 +18,7 @@
   width: 320px;
   transition: width 0.3s ease-in-out, background-color 0.3s, transform 0.2s;
   animation: fadeIn 0.3s ease-out;
+  position: relative;
 }
 
 @keyframes fadeIn {
@@ -81,6 +82,10 @@
   text-align: right;
   box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.05);
   transition: background-color 0.3s, color 0.3s, transform 0.2s;
+  min-height: 100px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 .calculatrice-affichage:focus-within {
@@ -91,10 +96,11 @@
   color: #888;
   font-size: 14px;
   min-height: 20px;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: font-size 0.2s ease;
 }
 
 .valeur-actuelle {
@@ -104,6 +110,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   transition: color 0.2s, font-size 0.2s ease-out;
+  word-wrap: break-word;
+  word-break: break-all;
+  line-height: 1.2;
 }
 
 .valeur-actuelle.erreur {
@@ -116,6 +125,15 @@
   20%, 80% { transform: translate3d(2px, 0, 0); }
   30%, 50%, 70% { transform: translate3d(-3px, 0, 0); }
   40%, 60% { transform: translate3d(3px, 0, 0); }
+}
+
+.resultat-calcule {
+  animation: resultShow 0.2s ease-out;
+}
+
+@keyframes resultShow {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .bascules-mode {
@@ -344,10 +362,16 @@ button:active {
 }
 
 .panneau-historique h3,
-.panneau-memoire h3 {
+.panneau-memoire h3,
+.panneau-memoire h4 {
   color: #555;
   font-size: 16px;
-  margin: 0;
+  margin: 0 0 10px 0;
+}
+
+.panneau-memoire h4 {
+  font-size: 14px;
+  margin-top: 15px;
 }
 
 .bouton-effacer-historique {
@@ -422,21 +446,55 @@ button:active {
   font-weight: bold;
 }
 
-.date-historique {
-  font-size: 12px;
-  color: #999;
+.details-historique {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-top: 5px;
 }
 
+.date-historique {
+  font-size: 12px;
+  color: #999;
+}
+
+.mode-historique {
+  font-size: 11px;
+  color: #888;
+  background-color: #f0f0f0;
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
 .valeur-memoire {
-  font-size: 16px;
+  font-size: 18px;
   font-weight: bold;
   margin-bottom: 8px;
+  color: #444;
 }
 
 .details-memoire {
   font-size: 14px;
   color: #666;
+  margin-bottom: 10px;
+}
+
+.memoire-aide {
+  border-top: 1px solid #eee;
+  padding-top: 10px;
+  margin-top: 10px;
+  transition: all 0.3s ease;
+}
+
+.memoire-aide ul {
+  padding-left: 18px;
+  margin: 10px 0;
+  font-size: 13px;
+  color: #777;
+}
+
+.memoire-aide li {
+  margin-bottom: 5px;
 }
 
 .info-raccourcis {
@@ -612,10 +670,15 @@ button:active {
 
 .theme-sombre .panneau-historique h3,
 .theme-sombre .panneau-memoire h3,
+.theme-sombre .panneau-memoire h4,
 .theme-sombre .historique-header,
 .theme-sombre .memoire-header {
   border-bottom: 1px solid #444;
   color: #ddd;
+}
+
+.theme-sombre .memoire-aide {
+  border-top-color: #444;
 }
 
 .theme-sombre .bouton-effacer-historique {
@@ -649,8 +712,17 @@ button:active {
   color: #aaa;
 }
 
-.theme-sombre .date-historique {
+.theme-sombre .date-historique,
+.theme-sombre .mode-historique {
   color: #888;
+}
+
+.theme-sombre .mode-historique {
+  background-color: #444;
+}
+
+.theme-sombre .memoire-aide ul {
+  color: #aaa;
 }
 
 .theme-sombre .info-raccourcis {
@@ -667,18 +739,6 @@ button:active {
   color: #eee;
 }
 
-/* Animations des touches */
-@keyframes buttonPress {
-  0% { transform: scale(1); }
-  50% { transform: scale(0.95); }
-  100% { transform: scale(1); }
-}
-
-/* Indications de validation pour les boutons appuyés */
-.bouton-appuye {
-  animation: buttonPress 0.2s forwards;
-}
-
 /* Support d'animations réduites */
 @media (prefers-reduced-motion: reduce) {
   .calculatrice,
@@ -686,7 +746,9 @@ button:active {
   .panneau-memoire,
   button,
   .element-historique,
-  .bascule-mode {
+  .bascule-mode,
+  .valeur-actuelle,
+  .formule {
     transition: none !important;
     animation: none !important;
     transform: none !important;
@@ -695,6 +757,10 @@ button:active {
   .valeur-actuelle.erreur {
     animation: none !important;
     color: #e74c3c;
+  }
+  
+  .theme-sombre .valeur-actuelle.erreur {
+    color: #ff6b6b;
   }
 }
 
@@ -781,4 +847,51 @@ button:focus-visible,
   .bascule-mode.actif {
     border-width: 2px;
   }
+}
+
+/* Amélioration de l'accessibilité des boutons de calculatrice */
+.ligne-clavier button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Animation pour les boutons appuyés */
+.bouton-appuye {
+  animation: buttonPress 0.2s forwards;
+}
+
+@keyframes buttonPress {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+/* Support pour le chargement initial */
+.calculatrice.chargement::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 10px;
+  z-index: 10;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.theme-sombre .calculatrice.chargement::before {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Animation de transition lors du changement de mode */
+.calculatrice.transition {
+  animation: modeTransition 0.3s ease-in-out;
+}
+
+@keyframes modeTransition {
+  0% { opacity: 0.9; transform: scale(0.98); }
+  100% { opacity: 1; transform: scale(1); }
 }
