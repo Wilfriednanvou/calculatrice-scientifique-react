@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 
+// Fonction utilitaire pour formater les dates de manière conviviale
 const formatDate = (date) => {
   if (!date) return '';
   
@@ -30,6 +31,15 @@ const formatDate = (date) => {
 };
 
 const PanneauHistorique = React.memo(({ historique, onSelectHistorique, onEffacerHistorique }) => {
+  // Gestionnaire pour la navigation au clavier
+  const handleKeyDown = useCallback((e, item) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onSelectHistorique(item.formule, item.resultat, item.estEnRadians);
+    }
+  }, [onSelectHistorique]);
+
+  // Si l'historique est vide
   if (!historique || historique.length === 0) {
     return (
       <div className="panneau-historique" role="region" aria-label="Historique des calculs">
@@ -56,21 +66,26 @@ const PanneauHistorique = React.memo(({ historique, onSelectHistorique, onEfface
           <div 
             key={index} 
             className="element-historique"
-            onClick={() => onSelectHistorique(item.formule, item.resultat)}
+            onClick={() => onSelectHistorique(item.formule, item.resultat, item.estEnRadians)}
             tabIndex={0}
             role="button"
             aria-label={`Formule: ${item.formule}, Résultat: ${item.resultat}`}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                onSelectHistorique(item.formule, item.resultat);
-              }
-            }}
+            onKeyDown={(e) => handleKeyDown(e, item)}
           >
-            <div className="formule-historique">{item.formule}</div>
-            <div className="resultat-historique">{item.resultat}</div>
-            {item.date && (
-              <div className="date-historique">{formatDate(item.date)}</div>
-            )}
+            <div className="formule-historique" title={item.formule}>
+              {item.formule}
+            </div>
+            <div className="resultat-historique" title={item.resultat}>
+              {item.resultat}
+            </div>
+            <div className="details-historique">
+              <span className="date-historique">{formatDate(item.date)}</span>
+              {item.estEnRadians !== undefined && (
+                <span className="mode-historique">
+                  {item.estEnRadians ? 'Radians' : 'Degrés'}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>
